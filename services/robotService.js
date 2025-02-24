@@ -4,7 +4,15 @@ const path = require("path");
 const DATA_DIR = path.join(__dirname, "../public/testdb");
 
 // 고정된 위치
-const PICKUP_LOCATION = { x: 50, y: 50 };
+const PICKUP_LOCATIONS = [
+  { x: 50, y: 50 },
+  { x: 100, y: 100 },
+  { x: 200, y: 50 },
+  { x: 50, y: 200 },
+  { x: 150, y: 150 }
+];
+
+// 창고 위치
 const WAREHOUSE_LOCATION = { x: 500, y: 500 };
 
 const machineNames = [
@@ -17,6 +25,10 @@ function generateMacAddress() {
     return Array.from({ length: 6 }, () => 
       Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
     ).join(':');
+}
+
+function getRandomPickupLocation() {
+  return PICKUP_LOCATIONS[Math.floor(Math.random() * PICKUP_LOCATIONS.length)];
 }
 
 function clearOldRobots() {
@@ -42,7 +54,8 @@ function generateRobotData(id) {
     location: { x: 0, y: 0 },
     previousLocation: { x: 0, y: 0 },
     charging: false,
-    carryingProduct: false
+    carryingProduct: false,
+    currentPickupLocation: null
   };
 }
 
@@ -104,10 +117,26 @@ function updateRobotStatus() {
   const robots = getAllRobots();
 
   Object.values(robots).forEach((robot) => {
+    // 충전 중인 경우 이동 불가
+    if (robot.charging) {
+      robot.battery = Math.min(100, robot.battery + 10);
+      if (robot.battery >= 100) {
+        robot.charging = false;
+        console.log(`${robot.id}이(가) 충전 완료되었습니다.`);
+      }
+      saveRobotData(robot.id, robot);
+      return;
+    }
+
+    // 현재 픽업 지점이 없다면 랜덤 픽업 지점 설정
+    if (!robot.currentPickupLocation) {
+      robot.currentPickupLocation = getRandomPickupLocation();
+    }
+
     if (!robot.carryingProduct) {
       // 이동을 픽업 위치로 유도
-      const dxPick = PICKUP_LOCATION.x - robot.location.x;
-      const dyPick = PICKUP_LOCATION.y - robot.location.y;
+      const dxPick = robot.currentPickupLocation.x - robot.location.x;
+      const dyPick = robot.currentPickupLocation.y - robot.location.y;
       const distToPickup = Math.sqrt(dxPick * dxPick + dyPick * dyPick);
 
       // 픽업 위치로 50% 비율로 이동
@@ -130,12 +159,15 @@ function updateRobotStatus() {
       robot.location.y += fraction * dyWare;
       
       if (distToWarehouse < 10) {
-        const dx = WAREHOUSE_LOCATION.x - PICKUP_LOCATION.x;
-        const dy = WAREHOUSE_LOCATION.y - PICKUP_LOCATION.y;
+        // 픽업 지점 ~ 창고 사이 거리로 배터리 계산
+        const dx = WAREHOUSE_LOCATION.x - robot.currentPickupLocation.x;
+        const dy = WAREHOUSE_LOCATION.y - robot.currentPickupLocation.y;
         const pickupToWarehouseDistance = Math.sqrt(dx * dx + dy * dy);
         const batteryConsumed = Math.floor(pickupToWarehouseDistance * 1);
         logProductMove(robot, pickupToWarehouseDistance, batteryConsumed);
         robot.carryingProduct = false;
+        // 배달 완료 후 다음 랜덤 위치로 바꿀 수 있게 null 처리
+        robot.currentPickupLocation = null;
         console.log(`${robot.id}이(가) 제품을 창고에 전달했습니다.`);
       }
     }
@@ -155,13 +187,6 @@ function updateRobotStatus() {
       robot.charging = true;
       robot.location = { x: 0, y: 0 };
       console.log(`${robot.id}이(가) 충전 모드로 전환되었습니다.`);
-    }
-    if (robot.charging) {
-      robot.battery = Math.min(100, robot.battery + 10);
-      if (robot.battery >= 100) {
-        robot.charging = false;
-        console.log(`${robot.id}이(가) 충전 완료되었습니다.`);
-      }
     }
 
     saveRobotData(robot.id, robot);
