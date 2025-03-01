@@ -16,15 +16,15 @@ const PICKUP_LOCATIONS = [
 const WAREHOUSE_LOCATION = { x: 500, y: 500 };
 
 const machineNames = [
-    "Counter-Balance Forklift Type AGV",
-    "Pallet Truck Type AGV",
-    "High-mast Reach Forklift Type AGV"
+  "Counter-Balance Forklift Type AGV",
+  "Pallet Truck Type AGV",
+  "High-mast Reach Forklift Type AGV"
 ];
 
 function generateMacAddress() {
-    return Array.from({ length: 6 }, () => 
-      Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
-    ).join(':');
+  return Array.from({ length: 6 }, () => 
+    Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
+  ).join(':');
 }
 
 function getRandomPickupLocation() {
@@ -37,12 +37,15 @@ function clearOldRobots() {
 }
 
 function generateMacAddress() {
-    return Array.from({ length: 6 }, () => 
-      Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
-    ).join(':');
+  return Array.from({ length: 6 }, () => 
+    Math.floor(Math.random() * 256).toString(16).padStart(2, '0')
+  ).join(':');
 }
-  
 
+/**
+ * 로봇 데이터 생성
+ * - pickupStartTime: 픽업 후 경과 시간을 측정하기 위한 시작 시점 (ms)
+ */
 function generateRobotData(id) {
   return {
     id: `machine${id}`,
@@ -55,7 +58,13 @@ function generateRobotData(id) {
     previousLocation: { x: 0, y: 0 },
     charging: false,
     carryingProduct: false,
-    currentPickupLocation: null
+    currentPickupLocation: null,
+
+    // 제품 픽업 시점 배터리 기록 (에너지 소모량 계산용)
+    batteryAtPickup: null,
+
+    // 제품을 픽업한 순간 Date.now() 저장
+    pickupStartTime: null
   };
 }
 
@@ -77,7 +86,16 @@ function saveRobotData(robotId, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
 }
 
-function logProductMove(robot, distanceTraveled, batteryConsumed) {
+/**
+ * 배달 완료 시 로그 기록
+ * - distanceTraveled: 픽업 지점 ~ 창고까지의 직선 거리
+ * - batteryConsumed: (픽업 배터리 - 도착 배터리) 등 실제 배터리 소모량
+ * - timeSpentSec: 실제 경과 시간(초)
+ */
+function logProductMove(robot, distanceTraveled, batteryConsumed, timeSpentSec) {
+  if (batteryConsumed == null) batteryConsumed = 0;
+  if (timeSpentSec == null) timeSpentSec = 0;
+
   const filePath = path.join(DATA_DIR, `${robot.id}/product_info.json`);
   let records = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, "utf8")) : [];
 
@@ -86,10 +104,15 @@ function logProductMove(robot, distanceTraveled, batteryConsumed) {
 
   const newRecord = {
     code: itemCode,
-    date: new Date().toISOString().split("T")[0],
+    // 날짜 YYYY-MM-DD HH:MM:SS
+    date: new Date().toISOString().slice(0, 19).replace('T',' '),
+    // 이동 거리
     distance: distanceTraveled.toFixed(2),
+    // 배터리 소모량
     energy_used: batteryConsumed.toFixed(2),
-    est_time: Math.floor(Math.random() * 2000) + 500,
+    // 실제 걸린 시간(초)
+    est_time: timeSpentSec.toString(), 
+    // 로봇 정보
     id: robot.id,
     name: robot.name,
     macaddr: robot.macaddr,
@@ -117,7 +140,7 @@ function updateRobotStatus() {
   const robots = getAllRobots();
 
   Object.values(robots).forEach((robot) => {
-    // 충전 중인 경우 이동 불가
+    // 1) 충전 중인 경우 이동 불가
     if (robot.charging) {
       robot.battery = Math.min(100, robot.battery + 10);
       if (robot.battery >= 100) {
@@ -128,28 +151,31 @@ function updateRobotStatus() {
       return;
     }
 
-    // 현재 픽업 지점이 없다면 랜덤 픽업 지점 설정
+    // 2) 현재 픽업 지점이 없다면 랜덤 픽업 지점 설정
     if (!robot.currentPickupLocation) {
       robot.currentPickupLocation = getRandomPickupLocation();
     }
 
+    // 3) 로봇이 제품을 안 들고 있다면 => 픽업 위치로 이동
     if (!robot.carryingProduct) {
-      // 이동을 픽업 위치로 유도
       const dxPick = robot.currentPickupLocation.x - robot.location.x;
       const dyPick = robot.currentPickupLocation.y - robot.location.y;
       const distToPickup = Math.sqrt(dxPick * dxPick + dyPick * dyPick);
 
-      // 픽업 위치로 50% 비율로 이동
+      // 이동
       const fraction = 0.5;
       robot.location.x += fraction * dxPick;
       robot.location.y += fraction * dyPick;
       
+      // 픽업 완료
       if (distToPickup < 10) {
+        robot.batteryAtPickup = robot.battery;         // 배터리 기록
+        robot.pickupStartTime = Date.now();            // 픽업 시점
         robot.carryingProduct = true;
-        console.log(`${robot.id}이(가) 제품을 픽업했습니다.`);
+        console.log(`${robot.id}이(가) 제품을 픽업했습니다. (배터리: ${robot.battery}%)`);
       }
     } else {
-      // 물건을 들고 있으면 창고 위치로 이동
+      // 4) 로봇이 제품을 들고 있다면 => 창고로 이동
       const dxWare = WAREHOUSE_LOCATION.x - robot.location.x;
       const dyWare = WAREHOUSE_LOCATION.y - robot.location.y;
       const distToWarehouse = Math.sqrt(dxWare * dxWare + dyWare * dyWare);
@@ -159,20 +185,35 @@ function updateRobotStatus() {
       robot.location.y += fraction * dyWare;
       
       if (distToWarehouse < 10) {
-        // 픽업 지점 ~ 창고 사이 거리로 배터리 계산
+        // 픽업 지점 ~ 창고 사이 거리
         const dx = WAREHOUSE_LOCATION.x - robot.currentPickupLocation.x;
         const dy = WAREHOUSE_LOCATION.y - robot.currentPickupLocation.y;
         const pickupToWarehouseDistance = Math.sqrt(dx * dx + dy * dy);
-        const batteryConsumed = Math.floor(pickupToWarehouseDistance * 1);
-        logProductMove(robot, pickupToWarehouseDistance, batteryConsumed);
+
+        // 실질적 배터리 소모량
+        let batteryUsed = robot.batteryAtPickup - robot.battery;
+        if (batteryUsed < 0) batteryUsed = 0; // 중간 충전 시 음수 방지
+
+        // 실제 걸린 시간 (초)
+        let timeSpentSec = 0;
+        if (robot.pickupStartTime) {
+          const now = Date.now();
+          timeSpentSec = Math.floor((now - robot.pickupStartTime) / 1000);
+        }
+
+        logProductMove(robot, pickupToWarehouseDistance, batteryUsed, timeSpentSec);
+
+        // 상태 초기화
         robot.carryingProduct = false;
-        // 배달 완료 후 다음 랜덤 위치로 바꿀 수 있게 null 처리
         robot.currentPickupLocation = null;
-        console.log(`${robot.id}이(가) 제품을 창고에 전달했습니다.`);
+        robot.batteryAtPickup = null;
+        robot.pickupStartTime = null;
+
+        console.log(`${robot.id}이(가) 제품을 창고에 전달했습니다. (소모: ${batteryUsed}%, 시간: ${timeSpentSec}s)`);
       }
     }
 
-    // 로봇 이동 후 배터리 소모 (추가적인 랜덤 이동)
+    // 5) 추가 무작위 이동 -> 배터리 소모
     robot.previousLocation = { ...robot.location };
     robot.location.x += Math.random() * 5 - 2.5;
     robot.location.y += Math.random() * 5 - 2.5;
@@ -180,13 +221,14 @@ function updateRobotStatus() {
     const dx = robot.location.x - robot.previousLocation.x;
     const dy = robot.location.y - robot.previousLocation.y;
     const randomDistance = Math.sqrt(dx * dx + dy * dy);
-    const randomBatteryConsumed = Math.floor(randomDistance * 1);
+    const randomBatteryConsumed = Math.floor(randomDistance);
     robot.battery = Math.max(0, robot.battery - randomBatteryConsumed);
 
+    // 6) 배터리가 20 이하 => 충전 모드 전환 (중간에도 고려)
     if (robot.battery <= 20 && !robot.charging) {
       robot.charging = true;
-      robot.location = { x: 0, y: 0 };
-      console.log(`${robot.id}이(가) 충전 모드로 전환되었습니다.`);
+      robot.location = { x: 0, y: 0 }; // 충전소로 이동(단순화)
+      console.log(`${robot.id}이(가) 충전 모드로 전환되었습니다. (현재 배터리: ${robot.battery}%)`);
     }
 
     saveRobotData(robot.id, robot);
