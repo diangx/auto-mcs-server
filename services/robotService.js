@@ -3,17 +3,21 @@ const path = require("path");
 
 const DATA_DIR = path.join(__dirname, "../public/testdb");
 
-// 고정된 위치
-const PICKUP_LOCATIONS = [
-  { x: 50, y: 50 },
-  { x: 100, y: 100 },
-  { x: 200, y: 50 },
-  { x: 50, y: 200 },
-  { x: 150, y: 150 }
-];
+const WAREHOUSE_LOCATION = { x: 300, y: 200 }; // 캔버스 중앙
 
-// 창고 위치
-const WAREHOUSE_LOCATION = { x: 500, y: 500 };
+const PICKUP_LOCATIONS = [
+  { x: 100, y: 100 },  // 좌측 상단
+  { x: 500, y: 100 },  // 우측 상단
+  { x: 100, y: 300 },  // 좌측 하단
+  { x: 500, y: 300 },  // 우측 하단
+  { x: 200, y: 50 },   // 위쪽 먼 곳
+  { x: 400, y: 50 },   // 위쪽 먼 곳
+  { x: 200, y: 350 },  // 아래쪽 먼 곳
+  { x: 400, y: 350 },  // 아래쪽 먼 곳
+  { x: 50, y: 200 },   // 왼쪽 먼 곳
+  { x: 550, y: 200 },  // 오른쪽 먼 곳
+  { x: 300, y: 50 },   // 중앙 위쪽
+];
 
 const machineNames = [
   "Counter-Balance Forklift Type AGV",
@@ -227,7 +231,7 @@ function updateRobotStatus() {
     // 6) 배터리가 20 이하 => 충전 모드 전환 (중간에도 고려)
     if (robot.battery <= 20 && !robot.charging) {
       robot.charging = true;
-      robot.location = { x: 0, y: 0 }; // 충전소로 이동(단순화)
+      robot.location = { x: 300, y: 350 } ; // 충전소로 이동(단순화)
       console.log(`${robot.id}이(가) 충전 모드로 전환되었습니다. (현재 배터리: ${robot.battery}%)`);
     }
 

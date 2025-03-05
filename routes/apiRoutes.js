@@ -46,7 +46,7 @@ router.get("/warehouse", (req, res) => {
         const records = JSON.parse(fs.readFileSync(filePath, "utf8"));
         records.forEach((record) => {
           if (warehouseState[record.warehouse_floor]) {
-            warehouseState[record.warehouse_floor].push(record.code);
+            warehouseState[record.warehouse_floor].push(record);
           }
         });
       } catch (error) {

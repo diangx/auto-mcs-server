@@ -9,6 +9,44 @@ const { updateRobotStatus, getAllRobots } = require("./robotService");
  */
 const subscriptions = new Map();
 
+// 예) 평균 계산 함수
+function getRobotAverages(robots) {
+  const robotList = Object.values(robots); // { machine1: {...}, machine2: {...} } -> 배열로 변환
+  
+  if (robotList.length === 0) {
+    return {
+      avgBattery: 0,
+      avgTemperature: 0,
+      totalRobots: 0,
+      chargingCount: 0,
+      runningCount: 0,
+    };
+  }
+
+  // 모든 로봇 배터리, 온도 합계
+  const totalBattery = robotList.reduce((sum, r) => sum + r.battery, 0);
+  const totalTemp = robotList.reduce((sum, r) => sum + r.temperature, 0);
+
+  // 평균값
+  const avgBattery = (totalBattery / robotList.length).toFixed(2);
+  const avgTemperature = (totalTemp / robotList.length).toFixed(2);
+
+  // 로봇 총 수
+  const totalRobots = robotList.length;
+  // charging === true 인 로봇 수
+  const chargingCount = robotList.filter((r) => r.charging).length;
+  // charging === false 인 로봇 수 (가동 중이라 가정)
+  const runningCount = totalRobots - chargingCount;
+
+  return {
+    avgBattery,
+    avgTemperature,
+    totalRobots,
+    chargingCount,
+    runningCount,
+  };
+}
+
 function setupWebSocket(server) {
   const wss = new WebSocket.Server({ server });
 
@@ -18,6 +56,13 @@ function setupWebSocket(server) {
     
     // 전체 로봇 최신 상태
     const allRobots = getAllRobots();
+    const { 
+      avgBattery,
+      avgTemperature,
+      totalRobots,
+      chargingCount,
+      runningCount,
+     } = getRobotAverages(allRobots);
 
     // 연결된 각 클라이언트에 대해
     wss.clients.forEach((client) => {
@@ -26,7 +71,14 @@ function setupWebSocket(server) {
         const subscribedMachineId = subscriptions.get(client);
         if (!subscribedMachineId) {
           // 구독 없음 → 아무것도 안 보내거나, 전체 전송하고 싶다면 여기서 처리
-          // client.send(JSON.stringify({ robots: allRobots }));
+          client.send(JSON.stringify({
+            robots: allRobots,
+            totalRobots,
+            chargingCount,
+            runningCount,
+            avgBattery,
+            avgTemperature,
+          }));
         } else {
           // 구독한 machineId만 전송
           const singleRobot = allRobots[subscribedMachineId];
