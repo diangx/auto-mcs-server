@@ -63,6 +63,10 @@ router.get("/warehouse", (req, res) => {
     }
   });
 
+  if(!req.query.page && !req.query.limit) {
+    res.json(warehouseState);
+  }
+
   // 모든 데이터를 하나의 배열로 평탄화 (1층, 2층 등의 구분 제거)
   let allRecords = Object.values(warehouseState).flat();
 

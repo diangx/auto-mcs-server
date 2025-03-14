@@ -167,7 +167,7 @@ function updateRobotStatus() {
       const distToPickup = Math.sqrt(dxPick * dxPick + dyPick * dyPick);
 
       // 이동
-      const fraction = 0.5;
+      const fraction = 0.05;
       robot.location.x += fraction * dxPick;
       robot.location.y += fraction * dyPick;
       
